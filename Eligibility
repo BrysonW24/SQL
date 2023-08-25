@@ -1,0 +1,713 @@
+--ORACLE
+--START OF CODE
+
+--CONTENTS:
+--#1 CREATED TABLES FOR GDW CUSTOMERID INSERTS
+--#2 UNIONED TABLES TOGETHER FOR COMPLETE LIST OF CUSTOMERS
+--#3 JOIN TO CAR, AND CREATED A ABLE WTIH CAR ATTRIBUTES INCL. 
+--#4 CAR JOIN TO ACAR, CREATED A ABLE WTIH ACAR ATTRIBUTES ADDED
+--#5 ACAR JOIN TO AAR, CREATED A ABLE WTIH AAR ATTRIBUTES ADDED
+--#6 MARKETING OPTOUTS / EMAIL OPTOUTS RUN ON AAR
+--#7 AAR JOIN TO CBR_BASE_OFFERS, CREATED A ABLE WTIH OFFER_RT ATTRIBUTES ADDED
+--#8 MARKETING OPTOUTS / EMAIL OPTOUTS RUN ON CBR_BASE_OFFERS
+--#9 CREATED A TABLE WITH THE DIFFERENCE FROM BASE TO OFFER_RT - CBR_BASE_OFFER_DIFF
+--#10 MARKETING OPTOUTS / EMAIL OPTOUTS RUN ON CBR_BASE_OFFER_DIFF
+
+================================================================================
+=========================================================
+
+SELECT TABLE_NAME 
+FROM ALL_TABLES
+WHERE OWNER = 'CEP_UTILS_OWNER'
+AND TABLE_NAME LIKE 'WALTERBR_%';
+
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--    DROP ZONE
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#1  DROP TABLE CEP_UTILS_OWNER.WALTERBR_CBR_BASE
+#2  DROP TABLE CEP_UTILS_OWNER.WALTERBR_CBR_BASE_1
+#3  DROP TABLE CEP_UTILS_OWNER.WALTERBR_CBR_BASE_2
+#4  DROP TABLE CEP_UTILS_OWNER.WALTERBR_CBR_BASE_3
+#5  DROP TABLE CEP_UTILS_OWNER.WALTERBR_CBR_BASE_4
+#6  DROP TABLE CEP_UTILS_OWNER.WALTERBR_CIF_JOIN_SPINE
+#7  DROP TABLE CEP_UTILS_OWNER.WALTERBR_CBR_BASE_CIF
+#8  DROP TABLE CEP_UTILS_OWNER.WALTERBR_CBR_BASE_ACAR
+#9  DROP TABLE CEP_UTILS_OWNER.WALTERBR_CBR_BASE_AAR
+#10 DROP TABLE CEP_UTILS_OWNER.WALTERBR_CBR_BASE_OFFERS
+#11 DROP TABLE CEP_UTILS_OWNER.WALTERBR_CBR_BASE_OFFER_DIFF
+
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--    TEST ZONE
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--CAR TABLE CHECK - SIZING
+SELECT count(*)
+FROM CEP_SPINE_OWNER.SPINE
+-- 30,719,609
+
+SELECT *
+FROM CEP_SPINE_OWNER.SPINE
+where rownum < 10 ;
+
+--ACAR TABLE CHECK - SIZING
+SELECT count(*)
+FROM CEP_SPINE_OWNER.ACAR
+--119,970,105
+
+SELECT *
+FROM CEP_SPINE_OWNER.ACAR
+where rownum < 10 ;
+
+--AAR TABLE CHECK - SIZING
+SELECT count(*)
+FROM CEP_SPINE_OWNER.AAR
+--49,913,712
+
+SELECT *
+FROM CEP_SPINE_OWNER.AAR
+where rownum < 10 ;
+
+--================================
+--CREATE TABLE #1 -- SPine *(CAR)*
+--================================
+BEGIN
+ CEP_UTILS_OWNER.LDAP_USER_UTILITY.DROP_PERSONAL_TABLE ('CBR_PROMO_1');
+END;
+
+begin
+  cep_utils_owner.ldap_user_utility.create_personal_table(
+  'CBR_PROMO_1', -- table name
+  
+  'as
+SELECT CUSTOMERID
+          ,DECD_TRST_F
+          ,MRKT_PATY_DECD_FLAG
+          ,CUST_EXCL_FOR_STAT_F
+          ,MANDATORY_DO_NOT_CONTACT_F
+          ,MAND_EXCL_LIST_TYPE
+          ,BEN_ONLY_CUST_F
+          ,ACCT_CLSE
+          ,OPT_OUT_DM_F
+          ,BAD_QUAL_ACCT_F
+          ,RBS_FLAG
+          ,PREMIER_BNKNG_CUST
+          ,SMAL_BUSN_CUST
+          ,LOCL_BUSN_BANK_CUST
+          ,CORP_FNCL_SERV_CUST
+          ,RURL_AGRI_BUSN_CUST
+          ,PRVT_FLAG
+          ,CUST_STAT_CODE
+          ,AGE_IN_MONTHS
+          ,AGE_UNKN_F
+          ,HAS_EMAL_F
+          ,INVALID_EMAIL
+          ,INVL_EMAL_CTCT_FLAG
+          ,HAS_EMAIL_RESPONSE_BOUNCE
+          ,HAS_EMAIL_RESP_SPAM_UNSUB
+          ,OPT_OUT_EMAIL_NEW_PROD
+          ,OPT_OUT_EMAIL_PROD_UPGD    
+FROM CEP_SPINE_OWNER.SPINE 
+
+WHERE  
+--Global Exclusions
+    (DECD_TRST_F = ''N'' OR DECD_TRST_F IS NULL) 
+    AND (MRKT_PATY_DECD_FLAG = ''N'' OR MRKT_PATY_DECD_FLAG IS NULL)  
+    AND CUST_EXCL_FOR_STAT_F IS NULL 
+    AND CUST_STAT_CODE in (''VIC'',''TAS'',''NSW'',''ACT'',''QLD'',''WA'',''SA'',''NT'')
+    
+--Business Mandatory Exclusions
+    and NVL(MANDATORY_DO_NOT_CONTACT_F,''N'')=''N'' --- Bus Mandatory Excl. Start
+    and NVL(MAND_EXCL_LIST_TYPE,''N'')=''N''
+    and NVL(BEN_ONLY_CUST_F,''N'')=''N''
+    and NVL(ACCT_CLSE,''N'') = ''N'' 
+    and BAD_QUAL_ACCT_F= ''N'' --- Bus Mandatory Excl. End
+--NBC Business Units
+    and ( RBS_FLAG = ''Y'' or
+          PREMIER_BNKNG_CUST = ''Y'' or
+          SMAL_BUSN_CUST = ''Y'' or
+          LOCL_BUSN_BANK_CUST = ''Y'' or 
+          CORP_FNCL_SERV_CUST = ''Y'' or 
+          RURL_AGRI_BUSN_CUST = ''Y'' or 
+          PRVT_FLAG = ''Y''
+        ) 
+--NBC Eligibility
+    and AGE_IN_MONTHS >=216 -- Customers Age
+    and NVL(AGE_UNKN_F ,''N'') = ''N''
+    and (COUNT_PRSL_TRAN_ACCT_NUM >=0 or CC_PERS_CNT_NUM >=0 or CC_BUS_CNT_NUM >=0)
+    '
+  );
+end;
+
+SELECT *
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_1;
+
+-- SIZING COUNT -- CUSTOMER LEVEL TABLE
+SELECT COUNT(*)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_1;
+7,995,369
+
+CAR ELIGIBLE - *7,995,369*
+
+--CAR -- *7,995,369* -- 29/01/21
+
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--Spine (CAR) + *ACAR* -->
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--==========================
+--CREATE TABLE #2
+--==========================
+BEGIN
+ CEP_UTILS_OWNER.LDAP_USER_UTILITY.DROP_PERSONAL_TABLE ('CBR_PROMO_2');
+END;
+
+begin
+  cep_utils_owner.ldap_user_utility.create_personal_table(
+  'CBR_PROMO_2', -- table name
+  
+  'as
+SELECT A.*
+          ,B.ACCOUNT_ID
+          ,B.IS_ACTIVE
+          ,B.ROLE_CODE
+          ,B.PRIMARY_CONTACT
+          ,B.CIF_PDCT_CODE
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_1 A
+    LEFT JOIN CEP_SPINE_OWNER.ACAR B
+    ON A.CUSTOMERID=B.CUSTOMER_ID 
+    WHERE 
+--ACAR Attributes
+(IS_ACTIVE = ''Y''  ---- DEBIT CARD
+    AND ROLE_CODE = ''BCA030''
+    AND PRIMARY_CONTACT = ''Y'')
+    OR 
+    (IS_ACTIVE = ''Y''  ---- CREDIT CARD
+    AND PRIMARY_CONTACT = ''Y''
+    AND CIF_PDCT_CODE = ''MCD'') 
+    '
+  );
+end;
+
+-- SIZING COUNT 
+SELECT COUNT(*)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_2
+;
+
+SELECT COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_2
+;
+7,611,185
+
+CAR + ACAR ELIGIBLE - *7,611,185*
+DROP OFF OF 384,184
+--(7,995,369 - 7,611,185)
+
+--CAR -- 7,995,369 -- 29/01/21
+--ACAR -- *7,611,185* -- 29/01/21
+
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- Spine (CAR) + ACAR + *AAR* (ELIGIBLE)
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--==========================
+--CREATE TABLE #3
+--==========================
+BEGIN
+ CEP_UTILS_OWNER.LDAP_USER_UTILITY.DROP_PERSONAL_TABLE ('CBR_PROMO_3');
+END;
+
+begin
+  cep_utils_owner.ldap_user_utility.create_personal_table(
+  'CBR_PROMO_3', -- table name
+  
+  'as
+SELECT    A.*
+          ,C.CARD_BUSN_NAME
+          ,C.DRCD_TYPE
+          ,C.DRCD_ACCT_BLOK_REAS
+          ,C.ACCT_CLSE_DATE
+          ,C.CCS_BLOK_RCLS_CODE
+          ,C.CCS_BUSN_UNIT
+          ,C.CIF_PDCT_CODE AS AAR_CIF_PDCT_CODE
+          ,C.CCS_CARD_SCHM_CODE
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_2 A
+LEFT JOIN CEP_SPINE_OWNER.AAR C
+    ON A.ACCOUNT_ID = C.ACCT_NUMBER
+ WHERE 
+--AAR Attributes
+((C.DRCD_ACCT_BLOK_REAS = ''ZM''
+    OR C.DRCD_ACCT_BLOK_REAS IS NULL)
+    AND C.ACCT_CLSE_DATE IS NULL
+    AND C.DRCD_TYPE IN (''MasterCard Scheme Debit'', ''MasterCard Scheme Debit Platinum''))
+       OR
+      (C.CARD_BUSN_NAME = ''Credit''
+      AND C.CCS_BLOK_RCLS_CODE IN (''ZM'',''__'')
+      AND C.ACCT_CLSE_DATE >= sysdate
+      AND C.CCS_BUSN_UNIT IN (''Retail'', ''Business'')
+      AND C.CIF_PDCT_CODE in (''MCD'')
+      AND C.CCS_CARD_SCHM_CODE in (''M''))
+    '
+  );
+end;
+    
+-- SIZING COUNT 
+SELECT COUNT(*)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_3;
+
+SELECT COUNT(DISTINCT ACCT_NUMBER)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_3;
+
+SELECT COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_3;
+6,410,414
+
+CAR + ACAR + AAR ELIGIBLE - *6,410,414*
+DROP OFF OF 1,200,771
+--(7,611,185 - 6,410,414)
+
+--CAR -- 7,995,369 -- 29/01/21
+--ACAR -- 7,611,185 -- 29/01/21
+--AAR -- *6,410,414* -- 29/01/21
+
+-------------------------------------------------
+-- <<CUSTOMERS WHO ARE OPTED OUT FROM THE BASE>>
+-------------------------------------------------
+
+SELECT OPT_OUT_DM_F 
+      ,COUNT(DISTINCT CUSTOMERID) 
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_BASE_AAR
+GROUP BY OPT_OUT_DM_F
+Y	 824,082
+N	 3,711,789
+
+===============================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- Spine (CAR) + ACAR + AAR + *AAR_eDM* (eDM Opt_outs from AAR)
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+===============
+--QUICK COUNT
+===============
+
+ SELECT COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_3 A
+WHERE
+--EDM Eligibility
+     (HAS_EMAL_F='Y')                                         --EDM EXCL. 
+    AND COALESCE(INVALID_EMAIL, 'N') = 'N'                    --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESPONSE_BOUNCE, 'N') = 'N'        --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESP_SPAM_UNSUB, 'N') = 'N'        --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_NEW_PROD, 'N') = 'N'           --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_PROD_UPGD, 'N') = 'N'          --EDM EXCL.
+    --AND OPT_OUT_DM_F = ''N''                                --MARKTING OPT_OUT EXCL.
+    ;
+
+===============
+--CREATE TABLE
+===============
+--EDM + MARKETING OPT_OUT ELIGIBILITY TABLE FROM AAR TABLE
+
+BEGIN
+ CEP_UTILS_OWNER.LDAP_USER_UTILITY.DROP_PERSONAL_TABLE ('CBR_PROMO_AAR_EDM');
+END;
+
+begin
+  cep_utils_owner.ldap_user_utility.create_personal_table(
+  'CBR_PROMO_AAR_EDM', -- table name
+  
+  'as
+ SELECT *
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_3
+WHERE
+--EDM Eligibility
+     (HAS_EMAL_F=''Y'')                                     --EDM EXCL.
+    AND COALESCE(INVALID_EMAIL, ''N'') = ''N''              --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESPONSE_BOUNCE, ''N'') = ''N''  --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESP_SPAM_UNSUB, ''N'') = ''N''  --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_NEW_PROD, ''N'') = ''N''     --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_PROD_UPGD, ''N'') = ''N''    --EDM EXCL.
+    AND OPT_OUT_DM_F = ''N''                                --MARKTING OPT_OUT EXCL.
+    '
+  );
+end;
+
+-- SIZING COUNT 
+
+SELECT *
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_AAR_EDM
+
+SELECT COUNT(*)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_AAR_EDM
+;
+
+SELECT COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_AAR_EDM
+;
+4,488,185
+
+CAR + ACAR + AAR + AAR_EDM ELIGIBLE - *4,488,185*
+DROP OFF OF 1,922,229 
+--(6,410,414 - 4,488,185)
+
+--CAR -- 7,995,369 -- 29/01/21
+--ACAR -- 7,611,185 -- 29/01/21
+--AAR -- 6,410,414 -- 29/01/21
+--AAR EDM -- *4,488,185* -- 29/01/21
+
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- Spine (CAR) + ACAR + AAR + AAR_eDM + *OFFER_RT*
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+BEGIN
+ CEP_UTILS_OWNER.LDAP_USER_UTILITY.DROP_PERSONAL_TABLE ('CBR_PROMO_4');
+END;
+
+begin
+  cep_utils_owner.ldap_user_utility.create_personal_table(
+  'CBR_PROMO_4', -- table name
+  
+  'as
+SELECT A.*
+--          ,B.MERCHANT_NAME
+--          ,B.OFFER_STATUS
+--          ,B.OFFER_NAME
+--          ,B.ACTIVATION_DATE
+--          ,B.REDEMPTION_DATE 
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_3 A
+    LEFT JOIN CEP_APP_OWNER.OFFER_RT B
+    ON A.CUSTOMERID=B.CUSTOMER_ID 
+WHERE CUSTOMER_ID not in (SELECT CUSTOMER_ID
+    FROM CEP_SPINE_OWNER.BGAR
+    WHERE CODE IN (''CBRNewOfferEx''))
+--      MERCHANT_NAME IN (''Just Jeans'')
+--      AND OFFER_STATUS = ''ACTIVATED''
+--      AND CREATE_DATE >= ''26/OCT/20''
+--      AND REDEMPTION_DATE IS NULL
+     
+    '
+  );
+end;
+
+-- SIZING COUNT 
+SELECT *
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_4
+
+SELECT COUNT(*)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_4
+;
+
+-- TOTAL CUSTOMERS FROM BASE IN THE OFFER_RT TABLE
+SELECT COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_4
+;
+3,620,255
+
+CAR + ACAR + AAR + AAR_EDM ELIGIBLE + OFFER_RT - *3,620,255*
+DROP OFF OF 867,930
+--(4,488,185 - 3,620,255)
+
+--CAR -- 7,995,369 -- 29/01/21
+--ACAR -- 7,611,185 -- 29/01/21
+--AAR -- 6,410,414 -- 29/01/21
+--AAR EDM -- 4,488,185 -- 29/01/21
+--OFFER_RT -- *3,620,255* -- 29/01/21
+
+-------------------------------------------------
+-- <<CUSTOMERS WHO ARE OPTED OUT OF MARKETING IN OFFER_RT>>
+-------------------------------------------------
+SELECT OPT_OUT_DM_F 
+      ,COUNT(DISTINCT CUSTOMERID) 
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_4
+GROUP BY OPT_OUT_DM_F
+Y	    672,373
+N	    2,947,882
+
+CUSTOMERS IN OFFER_RT WHO CAN RECEIVE MARKETING NBCS - *2,947,882*
+--DROP OFF OF 582,161 CUSTOMERS 
+
+================================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- Spine (CAR) + ACAR + AAR + AAR_eDM (eDM Opt_outs from AAR) + OFFER_RT + OFFER_RT_eDM (eDM Opt_outs from OFFER_RT)
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+===============
+--QUICK COUNT
+===============
+
+ SELECT COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_4 A
+WHERE
+--EDM Eligibility -- 5,161,267
+     (HAS_EMAL_F='Y')                                         --EDM EXCL. 
+    AND COALESCE(INVALID_EMAIL, 'N') = 'N'                    --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESPONSE_BOUNCE, 'N') = 'N'        --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESP_SPAM_UNSUB, 'N') = 'N'        --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_NEW_PROD, 'N') = 'N'           --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_PROD_UPGD, 'N') = 'N'          --EDM EXCL.
+    --AND OPT_OUT_DM_F = ''N''                                --MARKTING OPT_OUT EXCL.
+    
+    ;
+
+===============
+--CREATE TABLE
+===============
+--EDM + MARKETING ELIGIBILITY TABLE FROM OFFER_RT TABLE
+
+BEGIN
+ CEP_UTILS_OWNER.LDAP_USER_UTILITY.DROP_PERSONAL_TABLE ('CBR_PROMO_OFFERRT_EDM');
+END;
+
+begin
+  cep_utils_owner.ldap_user_utility.create_personal_table(
+  'CBR_PROMO_OFFERRT_EDM', -- table name
+  
+  'as
+ SELECT *
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_4
+WHERE
+--EDM Eligibility
+     (HAS_EMAL_F=''Y'')                                     --EDM EXCL.
+    AND COALESCE(INVALID_EMAIL, ''N'') = ''N''              --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESPONSE_BOUNCE, ''N'') = ''N''  --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESP_SPAM_UNSUB, ''N'') = ''N''  --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_NEW_PROD, ''N'') = ''N''     --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_PROD_UPGD, ''N'') = ''N''    --EDM EXCL.
+    AND OPT_OUT_DM_F = ''N''                                --MARKTING OPT_OUT EXCL.
+    '
+  );
+end;
+
+SELECT *
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_OFFERRT_EDM
+
+SELECT COUNT(*)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_OFFERRT_EDM
+;
+
+SELECT COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_OFFERRT_EDM
+;
+2,607,289
+
+CAR + ACAR + AAR + AAR_EDM ELIGIBLE + OFFER_RT - *2,607,289*
+DROP OFF OF 1,012,966
+--(3,620,255 - 2,607,289)
+
+--CAR -- 7,995,369 -- 29/01/21
+--ACAR -- 7,611,185 -- 29/01/21
+--AAR -- 6,410,414 -- 29/01/21
+--AAR EDM -- 4,488,185 -- 29/01/21
+--OFFER_RT -- 3,620,255 -- 29/01/21
+--OFFER_RT EDM -- *2,607,289* -- 29/01/21
+
+================================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- DIFFERENCE FROM BASE (AAR) TO CUSTOMERS IN OFFER_RT 
+--Eligble not Enrolled -- 1,565,879 -- 11/12/2020
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+BEGIN
+ CEP_UTILS_OWNER.LDAP_USER_UTILITY.DROP_PERSONAL_TABLE ('CBR_BASE_OFFER_DIFF');
+END;
+
+begin
+  cep_utils_owner.ldap_user_utility.create_personal_table(
+  'CBR_BASE_OFFER_DIFF', -- table name
+  
+  'as
+SELECT A.*
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_BASE_AAR A
+WHERE  A.CUSTOMERID not in (SELECT CUSTOMERID
+    FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_4)
+    '
+  );
+end;
+
+-- TOTAL CUSTOMERS FROM BASE - CUSTOMERS OFFER_RT TABLE
+SELECT *
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_BASE_OFFER_DIFF
+;
+
+-- TOTAL CUSTOMERS FROM BASE - CUSTOMERS OFFER_RT TABLE
+SELECT COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_BASE_OFFER_DIFF
+;
+1,545,053
+
+-------------------------------------------------
+-- <<CUSTOMERS WHO ARE OPTED OUT OF MARKETING IN OFFER_RT>>
+-------------------------------------------------
+--MARKETING OPT-IN CUSTOMERS IN *ELIGIBLE* GROUP
+SELECT OPT_OUT_DM_F 
+      ,COUNT(DISTINCT CUSTOMERID) 
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_BASE_OFFER_DIFF
+GROUP BY OPT_OUT_DM_F
+Y	    241,921
+N	    1,323,958
+
+ELIGIBLE NOT ENROLLED - WHO CAN RECEIVE MARKETING NBCS - *1,323,958*
+--DROP OFF OF 241,921 CUSTOMERS 
+
+================================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- Spine (CAR) + ACAR + AAR + AAR_eDM (eDM Opt_outs from AAR) + OFFER_RT + OFFER_RT_eDM (eDM Opt_outs from OFFER_RT) 
+--AAR TO OFFER_RT = DIFFERENCE
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+===============
+--QUICK COUNT
+===============
+
+ SELECT COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_BASE_OFFER_DIFF A
+WHERE
+--EDM Eligibility -- 5,161,267
+     (HAS_EMAL_F='Y')                                         --EDM EXCL. 
+    AND COALESCE(INVALID_EMAIL, 'N') = 'N'                    --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESPONSE_BOUNCE, 'N') = 'N'        --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESP_SPAM_UNSUB, 'N') = 'N'        --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_NEW_PROD, 'N') = 'N'           --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_PROD_UPGD, 'N') = 'N'          --EDM EXCL.
+    --AND OPT_OUT_DM_F = ''N''                                --MARKTING OPT_OUT EXCL.
+    ;
+
+===============
+--CREATE TABLE
+===============
+--EDM + MARKETING ELIGIBILITY TABLE FROM OFFER_RT TABLE
+
+BEGIN
+ CEP_UTILS_OWNER.LDAP_USER_UTILITY.DROP_PERSONAL_TABLE ('CBR_PROMO_DIFF_EDM');
+END;
+
+begin
+  cep_utils_owner.ldap_user_utility.create_personal_table(
+  'CBR_PROMO_DIFF_EDM', -- table name
+  
+  'as
+ SELECT *
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_BASE_OFFER_DIFF
+WHERE
+--EDM Eligibility
+     (HAS_EMAL_F=''Y'')                                     --EDM EXCL.
+    AND COALESCE(INVALID_EMAIL, ''N'') = ''N''              --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESPONSE_BOUNCE, ''N'') = ''N''  --EDM EXCL.
+    AND COALESCE(HAS_EMAIL_RESP_SPAM_UNSUB, ''N'') = ''N''  --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_NEW_PROD, ''N'') = ''N''     --EDM EXCL.
+    AND COALESCE(OPT_OUT_EMAIL_PROD_UPGD, ''N'') = ''N''    --EDM EXCL.
+    AND OPT_OUT_DM_F = ''N''                                --MARKTING OPT_OUT EXCL.
+    '
+  );
+end;
+
+SELECT *
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_DIFF_EDM
+
+SELECT COUNT(*)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_DIFF_EDM
+;
+
+SELECT COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_DIFF_EDM
+;
+1,084,608
+
+CAR + ACAR + AAR + AAR_EDM + OFFER_RT + OFFER_RT_EDM + DIFFERENCE - *1,084,608*
+DROP OFF OF 460,445
+--(1,545,053 - 1,084,608)
+
+--CAR -- 7,995,369 -- 29/01/21
+--ACAR -- 7,611,185 -- 29/01/21
+--AAR -- 6,410,414 -- 29/01/21
+--AAR EDM -- 4,488,185 -- 29/01/21
+--OFFER_RT -- 3,620,255 -- 29/01/21
+--OFFER_RT EDM -- *2,607,289* -- 29/01/21
+--DIFFERENCE (AAR-OFFER_RT) -- 1,545,053 -- 29/01/21
+--DIFFERENCE_EDM -- 1,084,608 -- 29/01/21
+
+================================================================================
+--==================================================
+--ENROLMENT / OFFER_RT / BGAR / SIMULATION BATCH CHECKS
+--==================================================
+--TABLE SEARCH
+SELECT *
+FROM CEP_APP_OWNER.OFFERS_CIF_MASTERCARD
+where rownum < 10;
+--NO RESULTS!
+
+SELECT COUNT(DISTINCT CUSTOMER_ID)
+FROM CEP_APP_OWNER.OFFER_RT
+--4,218,837 - 10/12/2020
+
+SELECT COUNT(*)
+    FROM CEP_SPINE_OWNER.BGAR
+    WHERE CODE IN ('CBRNewOfferEx')
+-- 82,042
+
+select CUSTOMERID, PYNAME 
+from cep_nbam_owner.nbasimulation 
+where PROGRAMKEYCODE='DF-152098';
+
+--======================================================================
+--BUSINESS UNIT BUCKETS AAR JOIN - *FOR SIZING AND PRESENTATION PURPOSES ONLY*
+--======================================================================
+BEGIN
+ CEP_UTILS_OWNER.LDAP_USER_UTILITY.DROP_PERSONAL_TABLE ('CBR_PROMO_5');
+END;
+
+begin
+  cep_utils_owner.ldap_user_utility.create_personal_table(
+  'CBR_PROMO_5', -- table name
+  
+  'as
+SELECT    CUSTOMERID
+          ,RBS_FLAG
+          ,PREMIER_BNKNG_CUST
+          ,SMAL_BUSN_CUST
+          ,LOCL_BUSN_BANK_CUST
+          ,CORP_FNCL_SERV_CUST
+          ,RURL_AGRI_BUSN_CUST
+          ,PRVT_FLAG
+     ,case when RBS_FLAG = ''Y'' then ''RBS'' 
+     when PREMIER_BNKNG_CUST = ''Y'' then ''PREMIER''
+     when SMAL_BUSN_CUST = ''Y'' then ''SMALLBUS'' 
+     when LOCL_BUSN_BANK_CUST = ''Y'' then ''LOCALBUS''
+     when CORP_FNCL_SERV_CUST = ''Y'' then ''CORPFNCL''
+     when RURL_AGRI_BUSN_CUST = ''Y'' then ''RURLBUS''
+     when PRVT_FLAG = ''Y'' then ''PRIVATE'' END AS BUSINESS_UNIT
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_4
+    '
+  );
+end;
+
+SELECT *
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_5
+
+-- SIZING COUNT 
+SELECT COUNT(*)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_5
+;
+-- 4,767,492 -- 14/01/2021 
+
+SELECT COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_5
+;
+-- 3,620,255 -- 14/01/2021 
+
+--GET THE OUTPUT OF THE BUCKETS
+SELECT BUSINESS_UNIT
+      ,COUNT(DISTINCT CUSTOMERID)
+FROM CEP_UTILS_OWNER.WALTERBR_CBR_PROMO_5
+GROUP BY BUSINESS_UNIT
+ORDER BY BUSINESS_UNIT
+;
+
+--CAR -- 4,546,309 -- 14/01/2021
+--ACAR -- 4,546,307 -- 14/01/2021
+--AAR -- 4,535,871 -- 14/01/2021
+--EDM -- *5,161,267* -- 14/01/2021
+--AAR -> OFFER_RT -- *3,620,255* -- 14/01/2021
+=================================================================--
+--==================================================
+--ACAR / AAR CHECKS
+--==================================================
+--SENSE CHECKS
+SELECT *
+FROM CEP_SPINE_OWNER.ACAR 
+WHERE ROWNUM <=20
+
+SELECT *
+FROM CEP_SPINE_OWNER.AAR 
+WHERE ROWNUM <=20 
