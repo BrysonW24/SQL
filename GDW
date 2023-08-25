@@ -1,0 +1,227 @@
+SELECT MIN (DELY_D)
+FROM U_V_DSV_001_CEE_1.BV_CUEE_RPRT_OPER_OUTC_CUST 
+    WHERE SUB_CHNL_M IN ('NB-Prominence-Panel-Content')
+ 
+MINIMUM(DELY_D)
+1    1/10/2019
+SELECT MAX (DELY_D)
+FROM U_V_DSV_001_CEE_1.BV_CUEE_RPRT_OPER_OUTC_CUST 
+    WHERE SUB_CHNL_M IN ('NB-Prominence-Panel-Content')
+ 
+    MAXIMUM(DELY_D)
+1    9/01/2022    
+    
+    SELECT INTA_CHNL_C AS CHANNEL
+                 ,SUB_CHNL_M AS LOCATION
+                 ,CASE                                                                                                     
+                            WHEN DELY_D BETWEEN '2019-10-01' AND '2019-12-31'  THEN '2019-H2'                                                      
+                            WHEN DELY_D BETWEEN '2020-01-01' AND '2020-06-30'  THEN '2020-H1'                                                         
+                            WHEN DELY_D BETWEEN '2020-07-01' AND '2020-12-31'  THEN '2020-H2'      
+                            WHEN DELY_D BETWEEN '2021-01-01' AND '2021-06-30'  THEN '2021-H1'                                                         
+                            WHEN DELY_D BETWEEN '2021-07-01' AND '2021-12-31'  THEN '2021-H2'
+                            WHEN DELY_D BETWEEN '2022-01-01' AND '2022-06-30'  THEN '2022-H1'                                                         
+                            END AS FY_HALFs
+                ,COUNT(DISTINCT NBCV_NAME_X) AS NBC_COUNT
+                ,COUNT(DISTINCT PATY_IDNN_HK) AS #DistinctCustomersPresented
+                 ,SUM(AVAL_Q) AS AVAILABLE
+                 ,SUM(PRES_Q) AS PRESENTED
+                 ,SUM(ACPT_Q) AS ACCEPTED
+                 ,SUM(DCLN_Q) AS DECLINED
+                  ,(ACCEPTED*1.000)/ NULLIFZERO (#DistinctCustomersPresented*1.0000) AS ACCPT_RATE
+                   ,(DECLINED*1.000)/ NULLIFZERO (#DistinctCustomersPresented*1.0000) AS DECLN_RATE
+FROM U_V_DSV_001_CEE_1.BV_CUEE_RPRT_OPER_OUTC_CUST 
+WHERE TARG_EXPM_CNTL_C IN ('T','E1') 
+    AND INTA_CHNL_C IN ('NTB')
+    AND SUB_CHNL_M IN ('NB-Prominence-Panel-Content')
+    AND NBCV_NAME_X NOT IN ('CrisisResponse','NBModWelcome')
+    AND  DELY_D >= '2019-10-01' 
+    AND DELY_D <='2022-06-30'  
+    GROUP BY 1,2,3
+;
+
+
+========================================================
+/*GDW CODE
+Summary: This code is to be used to pull data from 'The Lab' tables in the BAL to source data for NBCs
+Contents of the Code below:
+#2: Code to pull the data in the below sections*/
+    --A) TABLE CREATION
+    --A) LOCATION SUMMARY
+    --A) CUSTOMER COUNT 
+    --A) PRESENTED
+    --A) ACCEPTED
+    --A) DECLINED
+    
+    --If there are any questions with the code, please reach out to Bryson Walter -  Bryson.Walter@cba.com.au
+    
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--#1 Code from the DDS Visualisation Team
+SEL 
+CASE WHEN TARG_EXPM_CNTL_C IN ('T','E1') THEN 'TARGET' ELSE 'CONTROL' END
+,SUB_CHNL_M
+, SUM(AVAL_Q)
+, SUM(PRES_Q)
+, SUM(ACPT_Q) 
+,SUM(DCLN_Q) 
+FROM U_V_DSV_001_CEE_1.BV_CUEE_RPRT_OPER_OUTC_CUST
+WHERE DELY_D >= '2021-05-01' AND DELY_D <= '2021-05-31'
+AND SUB_CHNL_M = 'CA-PRODUCT-CATEGORIES-TIER2-CREDIT-CARDS-HERO-BANNER'
+GROUP BY 1,2
+
+--#2 Code to pull data
+/*=============================================
+--A) --------TABLE CREATION------------
+=============================================*/
+
+DROP TABLE DATA_OUTPUT
+
+CREATE MULTISET VOLATILE TABLE DATA_OUTPUT AS
+(
+    SELECT A.PATY_IDNN_HK  --FOR CUSTOMER COUNT
+                 ,A.INTA_CHNL_C
+                 ,A.SUB_CHNL_M
+                 ,A.NBCV_NAME_X
+                 ,A.NBCV_GRUP_X
+                 ,A.NBCV_ISSU_X
+                 ,TRUNC (CAST(A.DELY_D AS DATE), 'MM') AS RPRT_MONTH
+                 ,SUM(A.AVAL_Q) AS AVAILABLE
+                 ,SUM(A.PRES_Q) AS PRESENTED
+                 ,SUM(A.ACPT_Q) AS ACCEPTED
+                 ,SUM(A.DCLN_Q) AS DECLINED
+FROM U_V_DSV_001_CEE_1.BV_CUEE_RPRT_OPER_OUTC_CUST A
+WHERE A.DELY_D BETWEEN '2021-01-01' AND '2021-05-31' 
+    AND A.TARG_EXPM_CNTL_C IN ('T','E1') 
+    AND A.INTA_CHNL_C IN ('ACTV_FEED','MOBL','NTB')
+    GROUP BY 1,2,3,4,5,6,7
+) 
+WITH DATA ON COMMIT PRESERVE ROWS;
+
+SELECT *
+FROM DATA_OUTPUT 
+SAMPLE 10;
+
+-------------------------------------------------------------------
+
+DROP TABLE DATA_OUTPUT_2
+
+CREATE MULTISET VOLATILE TABLE DATA_OUTPUT_2 AS
+(
+    SELECT A.*
+                 ,C.PRIM_BUSN_OUTC_M
+                 ,C.PRIM_BUSN_OUTC_C
+                 ,TRUNC (CAST(A.DELY_D AS DATE), 'MM') AS RPRT_MONTH
+FROM DATA_OUTPUT A
+LEFT JOIN U_V_DSV_001_CEE_1.FACT_MRKT_NBCV_OPRN_REFN B    ON A.PATY_IDNN_HK = B.PATY_IDNN_HK    
+LEFT JOIN U_V_DSV_001_CEE_1.DIMN_MRKT_NBCV_CPGN C                 ON B.CPGN_I = C.CPGN_I    
+    GROUP BY 1,2,3,4,5,6,7,8,9
+) 
+WITH DATA ON COMMIT PRESERVE ROWS;
+---------
+FROM U_V_DSV_001_CEE_1.FACT_MRKT_NBCV_OPRN_REFN a                         
+LEFT JOIN U_V_DSV_001_CEE_1.DIMN_MRKT_NBCV_CHNL b ON b.CHNL_I = a.CHNL_I                         
+LEFT JOIN U_V_DSV_001_CEE_1.DIMN_MRKT_NBCV_CPGN c ON c.CPGN_I = a.CPGN_I                        
+LEFT JOIN  U_V_DSV_001_CEE_1.FACT_MRKT_NBCV_BUSN d ON a.INTA_HK = d.HDHD_INTA_HK    
+SELECT *
+FROM U_V_DSV_001_CEE_1.FACT_MRKT_NBCV_OPRN_REFN 
+SAMPLE 10;
+
+SELECT DISTINCT(TARG_EXPM_CNTL_C)
+FROM U_V_DSV_001_CEE_1.BV_CUEE_RPRT_OPER_OUTC_CUST
+
+/*=============================================
+--B) -------SUMMARY - PERFORMANCE------
+=============================================*/
+--Provides data on the below:
+/*
+NBC Count 
+Customer Count Vol.
+Presented Vol.
+Accepted Vol. 
+Declined Vol.*/
+
+SELECT DISTINCT INTA_CHNL_C
+                ,SUB_CHNL_M
+                ,RPRT_MONTH
+                ,COUNT(DISTINCT NBCV_NAME_X) AS NBC_COUNT
+                ,COUNT(DISTINCT PATY_IDNN_HK) AS CUSTOMER_COUNT
+                ,SUM(PRESENTED) AS PRESENTED
+                ,SUM(ACCEPTED) AS ACCEPTED
+                ,SUM(DECLINED) AS DECLINED
+FROM DATA_OUTPUT
+WHERE RPRT_MONTH BETWEEN '2021-05-01' AND '2021-05-31' 
+GROUP BY 1,2,3
+ORDER BY 1,2
+
+/*=============================================
+--C) -------SUMMARY - 6 MONTH AVG. PERFORMANCE------
+=============================================*/
+--Provides data on the below:
+/*Presented Vol.
+Accepted Vol. 
+Declined Vol.
+Customer Count Vol.*/
+
+SELECT DISTINCT INTA_CHNL_C
+                ,SUB_CHNL_M
+                ,RPRT_MONTH
+                ,COUNT(DISTINCT PATY_IDNN_HK) AS CUSTOMER_COUNT
+                ,SUM(PRESENTED) AS PRESENTED
+                ,SUM(ACCEPTED) AS ACCEPTED
+                ,SUM(DECLINED) AS DECLINED
+FROM DATA_OUTPUT
+GROUP BY 1,2,3
+ORDER BY 1,2
+
+/*=============================================
+--D) -------SUMMARY - 6 MONTH NBC COUNT------
+=============================================*/
+--Provides data on the below:
+/*NBC Counts*/
+
+SELECT DISTINCT INTA_CHNL_C
+                ,SUB_CHNL_M
+                ,RPRT_MONTH
+                ,COUNT(DISTINCT NBCV_NAME_X) AS NBC_COUNT
+FROM DATA_OUTPUT
+GROUP BY 1,2,3
+ORDER BY 1,2
+
+/*=============================================
+--E) -------SUMMARY - NBC TYPE BREAKDOWN----
+=============================================*/
+--Provides data on the below:
+SELECT DISTINCT INTA_CHNL_C
+                ,SUB_CHNL_M
+                ,RPRT_MONTH
+                ,NBCV_ISSU_X AS NBC_TYPE
+                ,COUNT(DISTINCT NBCV_NAME_X) AS NBC_COUNT
+FROM DATA_OUTPUT
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4
+
+/*=============================================
+--F) -------SUMMARY - NBC PORTFOLIO BREAKDOWN----
+=============================================*/
+--Provides data on the below:
+SELECT DISTINCT INTA_CHNL_C
+                ,SUB_CHNL_M
+                ,RPRT_MONTH
+                ,NBCV_GRUP_X AS PORTFOLIO
+                ,COUNT(DISTINCT NBCV_NAME_X) AS NBC_COUNT
+FROM DATA_OUTPUT
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4
+
+/*=============================================
+--G) ---SUMMARY - NBC PORTFOLIO, BY TYPE BREAKDOWN----
+=============================================*/
+--Provides data on the below:
+SELECT DISTINCT INTA_CHNL_C
+                ,SUB_CHNL_M
+                ,RPRT_MONTH
+                ,NBCV_GRUP_X AS PORTFOLIO
+                ,NBCV_ISSU_X AS NBC_TYPE
+                ,COUNT(DISTINCT NBCV_NAME_X) AS NBC_COUNT
+FROM DATA_OUTPUT
+GROUP BY 1,2,3,4,5
+ORDER BY 1,2,3,4,5
