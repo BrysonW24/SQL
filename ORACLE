@@ -1,0 +1,63 @@
+SELECT  --dimApplication.PYAPPLICATION                                                                                      AS Implementation_Name
+        --,dimApplication.PYAPPLICATIONVERSION                                                                              AS Implementation_Version
+        -- ih.PXFACTID                                                                                                        AS Fact_Id
+        --,CASE WHEN dimCustomer.PYCUSTOMERSEGMENT    IS NULL THEN 'Missing Value' ELSE dimCustomer.PYCUSTOMERSEGMENT     END AS Customer_Type
+        --,CASE WHEN dimCustomer.PYCUSTOMERSUBSEGMENT IS NULL THEN 'Missing Value' ELSE dimCustomer.PYCUSTOMERSUBSEGMENT  END AS Customer_Cohort_Type
+        ih.PYSUBJECTID                                                                                                     AS Customer_Id
+        ,'/' || dimProposition.PYGROUP || '/' || dimProposition.PYISSUE || '/' || dimProposition.PYNAME                     AS NBA_Proposition_Identifier
+        ,to_char(ih.PXOUTCOMETIME,'DD-MM-YYYY HH24:MI:SS')                                                                  AS Customer_Feedback_Date
+        ,to_char(ih.PXDECISIONTIME,'DD-MM-YYYY HH24:MI:SS')                                                                  AS Decision_Time
+        ,dimFeedback.PYOUTCOME                                                                                              AS NBA_Response
+        ,dimFeedback.PYBEHAVIOUR                                                                                            AS NBA_Adaptive_Behaviour
+       -- ,CASE WHEN ih.SUBFEEDBACKVALUE IS NULL THEN '?' ELSE ih.SUBFEEDBACKVALUE END                                        AS Customer_SubFeedBack
+        ,dimChannel.PYDIRECTION                                                                                             AS Interaction_Type
+        ,dimChannel.PYCHANNEL                                                                                               AS Channel_Name
+        ,ih.APPNAME                                                                                                         AS Application_Name
+        ,CASE WHEN ih.EXTERNALID_1     IS NULL THEN '?' ELSE ih.EXTERNALID_1     END                                        AS SAP_Opportunity_Id
+        ,CASE WHEN ih.EXTERNALID_2     IS NULL THEN '?' ELSE ih.EXTERNALID_2     END                                        AS SAP_Activity_Id 
+        ,CASE WHEN ih.EXTERNALID_3     IS NULL THEN '?' ELSE ih.EXTERNALID_3     END                                        AS SAP_Quotation_Id
+        ,CASE
+          WHEN ih.EXPERIMENTALGROUP ='T'                    THEN 'Target Group'
+         WHEN ih.EXPERIMENTALGROUP ='E'                    THEN 'Exploration Group'
+          WHEN ih.EXPERIMENTALGROUP ='C'                    THEN 'Control Group'
+          WHEN ih.EXPERIMENTALGROUP IS NULL                 THEN 'Missing Value'
+         WHEN ih.EXPERIMENTALGROUP Not In ('T', 'E', 'C')  THEN 'Wrong Value: ' || EXPERIMENTALGROUP
+         ELSE ih.EXPERIMENTALGROUP
+         END                                                                                                                AS Experimental_Group
+        ,ih.PXRANK                                                                                                          AS NBA_RANK
+        ,ih.PXPRIORITY                                                                                                      AS NBC_SCORE
+        --,CASE WHEN dimOperator.PYOPERATOR IS NULL THEN '?' ELSE dimOperator.PYOPERATOR END                                  AS Staff_Id
+        --,CASE WHEN dimOperator.PYUNIT     IS NULL THEN '?' ELSE dimOperator.PYUNIT     END                                  AS Staff_Unit
+        --,CASE WHEN dimOperator.PYDIVISION IS NULL THEN '?' ELSE dimOperator.PYDIVISION END                                  AS Staff_Branch_Id
+FROM CEP_IH_OWNER.PR_DATA_IH_FACT ih --Pega Marketing Interaction History (IH).
+LEFT OUTER JOIN CEP_IH_OWNER.PR_DATA_IH_DIM_ACTION       dimProposition ON ih.PZACTIONID       = dimProposition.PZID   --Constructing Proposition Identifier (pxIdentifier).
+LEFT OUTER JOIN CEP_IH_OWNER.PR_DATA_IH_DIM_APPLICATION  dimApplication ON ih.PZAPPLICATIONID  = dimApplication.PZID   --Getting implemenation details (Pega related).
+LEFT OUTER JOIN CEP_IH_OWNER.PR_DATA_IH_DIM_CHANNEL      dimChannel     ON ih.PZCHANNELID      = dimChannel.PZID       --Getting channel details (e.g. Inbound-Branch).
+LEFT OUTER JOIN CEP_IH_OWNER.PR_DATA_IH_DIM_CUSTOMER     dimCustomer    ON ih.PZCUSTOMERID     = dimCustomer.PZID      --Getting customer dimensions (e.g Retail-CohortId).
+LEFT OUTER JOIN CEP_IH_OWNER.PR_DATA_IH_DIM_OPERATOR     dimOperator    ON ih.PZOPERATORID     = dimOperator.PZID      --Getting staff dimensions (e.g staffId, branch code).
+LEFT OUTER JOIN CEP_IH_OWNER.PR_DATA_IH_DIM_OUTCOME      dimFeedback    ON ih.PZOUTCOMEID      = dimFeedback.PZID      --Getting customer/system response/messages (e.g Accepted, Created).
+WHERE 1=1
+--and pysubjectid in ('782811159','500511792','36911011','165910170')
+and dimchannel.pychannel='SMS'
+ -- and dimchannel.pychannel='Unknown'
+--and pzactionid in ('-6688528412192153639')              --CustomerID (CIF)
+and dimProposition.pyname in ('HLIntentToSell', 'HLIntroPropertyApp')
+--'LenderMilestone6',
+--'LenderMilestone45','HomeSeekerFollowUp12','HomeSeekerFollowUp2','HomeSeekerFollowUp6','HomeSeekerFollowUp22','AutoClosure','LenderMilestone5')
+ --and dimFeedback.PYOUTCOME='Contact Requested'  --(Customer) feedback/response
+--and dimFeedback.PYOUTCOME='Created' 
+--and ih.APPNAME like  'CommSee-SAP'          --Application name
+--and ih.APPNAME like  '%SAP'
+--and ih.EXPERIMENTALGROUP = 'E'        --Experimental group values: E | T | C
+--and ih.PXPRIORITY > 0.3               --Next-Best-Conversation Score
+-- and ih.PXOUTCOMETIME > to_timestamp('2016-07-21 8:00:00','yyyy-mm-dd HH24:MI:SS')        --(Customer) feedback/response date-time stamp
+--and ih.PXOUTCOMETIME >= date '2016-10-25' 
+--and to_char(ih.PXOUTCOMETIME,'yyyy-mm-dd') = '2016-10-19'
+--and dimProposition.PYGROUP='Customer' and dimProposition.PYISSUE = 'Service' and dimProposition.PYNAME = 'FHCMass2015' --NBA proposition identifier e.g. /Customer/Service/FHCMass2015
+--and dimProposition.PYNAME = 'HomeContentInsurance'
+  --and to_char(ih.PXOUTCOMETIME,'DD-MON-YYYY') in (select to_char(sysdate,'DD-MON-YYYY') from dual) --(Customer) feedback/response date-time stamp
+--and dimFeedback.PYOUTCOME='Accepted' AND dimFeedback.PYBEHAVIOUR !='Positive' --Sanity check, must return no rows.
+--and dimFeedback.PYOUTCOME='Created'  AND dimFeedback.PYBEHAVIOUR !='Neutral'  --Sanity check, must return no rows.
+--and dimFeedback.PYOUTCOME='Sent'
+ORDER BY ih.PXOUTCOMETIME DESC;
+
